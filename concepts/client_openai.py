@@ -7,19 +7,18 @@ import nest_asyncio
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI
 
 # Apply nest_asyncio to allow nested event loops (needed for Jupyter/IPython)
 nest_asyncio.apply()
 
 # Load environment variables
-load_dotenv("../.env")
+load_dotenv()
 
-
-class MCPOpenAIClient:
+class MCPClient:
     """Client for interacting with OpenAI models using MCP tools."""
-
-    def __init__(self, model: str = "gpt-4o"):
+ 
+    def __init__(self, model: str = "gpt-4.1"):
         """Initialize the OpenAI MCP client.
 
         Args:
@@ -28,7 +27,7 @@ class MCPOpenAIClient:
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
-        self.openai_client = AsyncOpenAI()
+        self.openai_client = AsyncAzureOpenAI(api_version="2024-12-01-preview")
         self.model = model
         self.stdio: Optional[Any] = None
         self.write: Optional[Any] = None
@@ -147,19 +146,41 @@ class MCPOpenAIClient:
         """Clean up resources."""
         await self.exit_stack.aclose()
 
+    async def chat_loop(self):
+        """Run an interactive chat loop"""
+        print("\nMCP Client Started!")
+        print("Type your queries or 'quit' to exit.")
 
+        while True:
+            try:
+                query = input("\nQuery: ").strip()
+
+                if query.lower() == 'quit':
+                    break
+
+                response = await self.process_query(query)
+                print("\n" + response)
+
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+
+async def cleanup(self):
+    """Clean up resources"""
+    await self.exit_stack.aclose()
+      
+import sys
 async def main():
-    """Main entry point for the client."""
-    client = MCPOpenAIClient()
-    await client.connect_to_server("server.py")
+    """Main function to run the MCP client"""
+    if len(sys.argv) < 2:
+        print("Usage: python client.py task_pilot_server.py")
+        sys.exit(1)
 
-    # Example: Ask about company vacation policy
-    query = "What is our company's vacation policy?"
-    print(f"\nQuery: {query}")
-
-    response = await client.process_query(query)
-    print(f"\nResponse: {response}")
-
+    client = MCPClient()
+    try:
+        await client.connect_to_server(sys.argv[1])
+        await client.chat_loop()
+    finally:
+        await client.cleanup()    
 
 if __name__ == "__main__":
     asyncio.run(main())

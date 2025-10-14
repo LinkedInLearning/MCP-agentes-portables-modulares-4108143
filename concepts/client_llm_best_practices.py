@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from contextlib import AsyncExitStack
@@ -14,6 +15,8 @@ from mcp.client.stdio import stdio_client
 from openai import AsyncAzureOpenAI
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 SYSTEM_INSTRUCTIONS = """
 You are a helpful agent that can manage tasks in a task management system.
@@ -102,6 +105,7 @@ class TaskPilotAgent:
 
     async def chat(self, user_prompt: str) -> str:
         """Chat with the LLM, allowing it to call MCP tools as needed."""
+        
         tools = await self.list_tools_for_openai()
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_INSTRUCTIONS},
@@ -109,12 +113,17 @@ class TaskPilotAgent:
         ]
 
         # First call to the model
-        response = await self.openai.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-        )
+        try:
+            response = await self.openai.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+            )
+        except Exception as e:
+            logging.error("OpenAI API error: %s", e)
+            return "Sorry, there was an error communicating with the model."
+        
         # Process the model's response
         response_message = response.choices[0].message
         messages.append(response_message)
@@ -139,12 +148,16 @@ class TaskPilotAgent:
             print("No tool calls were made by the model.")
 
         # Call the model again with tool outputs
-        final_response = await self.openai.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="none",
-        )
+        try:
+            final_response = await self.openai.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                tool_choice="none",
+            )
+        except Exception as e:
+            logging.error("OpenAI API error: %s", e)
+            return "Sorry, there was an error communicating with the model."
 
         return final_response.choices[0].message.content
 

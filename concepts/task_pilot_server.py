@@ -50,7 +50,7 @@ def add_task(title: str, tags: Optional[list[str]] = None) -> Task:
     return task
 
 @mcp.tool()
-def list_tasks(include_done: bool = True) -> list[Task]:
+def list_tasks(include_done: bool = False) -> list[Task]:
     """Return all tasks (filtering by completion)."""
     tasks = [Task(**t) for t in STORE.values()]
     if not include_done:
