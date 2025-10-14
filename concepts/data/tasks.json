@@ -1,0 +1,113 @@
+{
+  "08d5cc1c31b64e4d89c43e9e5095dd1c": {
+    "id": "08d5cc1c31b64e4d89c43e9e5095dd1c",
+    "title": "Record Intro Video",
+    "done": false,
+    "tags": [
+      "video",
+      "intro"
+    ]
+  },
+  "e7c2ae5eb7114aa3be6caa0420ec1613": {
+    "id": "e7c2ae5eb7114aa3be6caa0420ec1613",
+    "title": "Write Course Outline",
+    "done": true,
+    "tags": [
+      "writing",
+      "course"
+    ]
+  },
+  "79b691bf7b654158a18463b81dff1422": {
+    "id": "79b691bf7b654158a18463b81dff1422",
+    "title": "Edit Course Materials",
+    "done": false,
+    "tags": [
+      "editing",
+      "materials"
+    ]
+  },
+  "c598ebfaf384404782324f0f28097dc0": {
+    "id": "c598ebfaf384404782324f0f28097dc0",
+    "title": "Draft Scripts",
+    "done": false,
+    "tags": [
+      "drafting",
+      "scripts"
+    ]
+  },
+  "66112d1c99ad4ba7baa82d9e48dc472c": {
+    "id": "66112d1c99ad4ba7baa82d9e48dc472c",
+    "title": "Create thumbnail for course",
+    "done": false,
+    "tags": [
+      "thumbnail",
+      "graphics"
+    ]
+  },
+  "10d72ebece0a4061a87270aa1a905b4e": {
+    "id": "10d72ebece0a4061a87270aa1a905b4e",
+    "title": "Design coding challenge",
+    "done": false,
+    "tags": [
+      "code",
+      "challenge"
+    ]
+  },
+  "b4787b489344461fb38f9a18984eafd4": {
+    "id": "b4787b489344461fb38f9a18984eafd4",
+    "title": "Create repository for new course",
+    "done": false,
+    "tags": [
+      "drafting",
+      "scripts"
+    ]
+  },
+  "8adae459935849b7ba52151dc3afbc88": {
+    "id": "8adae459935849b7ba52151dc3afbc88",
+    "title": "Record Chapter 2",
+    "done": false,
+    "tags": [
+      "course"
+    ]
+  },
+  "f42ac9ddf6504529bb6afe31cdeadf40": {
+    "id": "f42ac9ddf6504529bb6afe31cdeadf40",
+    "title": "Record Chapter 2",
+    "done": false,
+    "tags": [
+      "course"
+    ]
+  },
+  "79e7a3b9e1f84ba4b41b389e8cd92ecc": {
+    "id": "79e7a3b9e1f84ba4b41b389e8cd92ecc",
+    "title": "Record Chapter 3",
+    "done": false,
+    "tags": [
+      "course"
+    ]
+  },
+  "9e7f5738808449ca914025ae4e530c26": {
+    "id": "9e7f5738808449ca914025ae4e530c26",
+    "title": "Record Chapter 3",
+    "done": true,
+    "tags": [
+      "course"
+    ]
+  },
+  "a97ead2a42f34de6ab652c6779100b52": {
+    "id": "a97ead2a42f34de6ab652c6779100b52",
+    "title": "Record Chapter 3",
+    "done": true,
+    "tags": [
+      "course"
+    ]
+  },
+  "52f3dee18c664b9b949c4c1ed7a07f3d": {
+    "id": "52f3dee18c664b9b949c4c1ed7a07f3d",
+    "title": "Record Chapter 3",
+    "done": true,
+    "tags": [
+      "course"
+    ]
+  }
+}

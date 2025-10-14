@@ -1,11 +1,4 @@
-"""Create a new task.
-    
-    Raises:
-        ValueError: If the task title is empty.
-
-    Returns:
-        Task: The created task.
-    """
+"""Server-side task management with MCP."""
 
 from pathlib import Path
 from typing import Optional, Dict
@@ -18,12 +11,14 @@ from mcp.server.fastmcp import FastMCP, Context
 DATA_FILE = Path("data/tasks.json")
 DATA_FILE.parent.mkdir(exist_ok=True)
 
-def _load() -> Dict[str, dict]:
+def load() -> Dict[str, dict]:
+    """Load the task store from disk, or return empty."""
     if DATA_FILE.exists():
         return json.loads(DATA_FILE.read_text(encoding="utf-8"))
     return {}
 
-def _save(store: Dict[str, dict]) -> None:
+def save(store: Dict[str, dict]) -> None:
+    """Save the task store to disk."""
     DATA_FILE.write_text(json.dumps(store, indent=2), encoding="utf-8")
 
 # ---------- Data model ----------
@@ -37,8 +32,9 @@ class Task(BaseModel):
 # Resolve any forward refs (safe even if none exist)
 Task.model_rebuild()
 
-STORE: Dict[str, dict] = _load()
+STORE: Dict[str, dict] = load()
 
+# ---------- MCP Setup ----------
 mcp = FastMCP("TaskPilot")
 
 # ---------- Tools ----------
@@ -50,7 +46,7 @@ def add_task(title: str, tags: Optional[list[str]] = None) -> Task:
         raise ValueError("Title cannot be empty.")
     task = Task(title=title, tags=[t for t in (tags or []) if t.strip()])
     STORE[task.id] = task.model_dump()
-    _save(STORE)
+    save(STORE)
     return task
 
 @mcp.tool()
@@ -69,7 +65,7 @@ def complete_task(task_id: str) -> Task:
     t = Task(**STORE[task_id])
     t.done = True
     STORE[t.id] = t.model_dump()
-    _save(STORE)
+    save(STORE)
     return t
 
 @mcp.tool()
@@ -81,7 +77,7 @@ def clear_completed() -> int:
             del STORE[tid]
             removed += 1
     if removed:
-        _save(STORE)
+        save(STORE)
     return removed
 
 @mcp.tool()
@@ -106,7 +102,7 @@ async def bulk_import(lines: list[str], ctx: Context) -> int:
         await ctx.report_progress(progress=idx, total=total, message=f"Imported {idx}/{total}")
         await ctx.debug(f"Created task {t.id}: {t.title}")
 
-    _save(STORE)
+    save(STORE)
     await ctx.info(f"Import complete: {created} created")
     return created
 
