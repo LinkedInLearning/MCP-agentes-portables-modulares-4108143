@@ -1,4 +1,12 @@
 mcp
 azure-identity
 openai
-logging
+pydantic
+python-dotenv
+azure-identity
+azure-storage-blob
+fastapi
+uvicorn[standard]
+openai
+requests
+aiohttp

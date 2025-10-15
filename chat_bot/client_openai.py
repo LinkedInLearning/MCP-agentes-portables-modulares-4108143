@@ -2,26 +2,16 @@
 import asyncio
 import json
 import sys
-import logging
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp import types
 from openai import AsyncAzureOpenAI
-
-# FastAPI for HTTP endpoint so Azure Bot Service can call the client
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
-LOG = logging.getLogger("client_openai")
 
 # Load environment variables
 load_dotenv()
-
-# (Bot Framework integration removed) The app provides a simple SPA and /message endpoint.
-
 
 class MCPClient:
     """Client for interacting with OpenAI models using MCP tools."""
@@ -52,23 +42,9 @@ class MCPClient:
         - Add logging and basic validation of returned tools.
         """
         # Server configuration
-        # Use the current Python executable to avoid mismatched environments
-        import sys as _sys, pathlib as _pathlib
-        python_exe = _sys.executable or "python"
-        # Resolve the server script to an absolute path relative to this file
-        server_path = _pathlib.Path(server_script_path)
-        if not server_path.is_absolute():
-            server_path = (_pathlib.Path(__file__).parent / server_path).resolve()
-
-        # Debug: print relevant env vars so we can see why server might fail
-        import os as _os
-        LOG.info("Launching MCP server with python=%s, script=%s", python_exe, str(server_path))
-        LOG.info("AZURE_STORAGE_ACCOUNT=%s", _os.environ.get("AZURE_STORAGE_ACCOUNT"))
-        LOG.info("AZURE_STORAGE_CONTAINER=%s", _os.environ.get("AZURE_STORAGE_CONTAINER"))
-
         server_params = StdioServerParameters(
-            command=python_exe,
-            args=[str(server_path)],
+            command="python",
+            args=[server_script_path],
         )
 
         # Connect to the server
@@ -77,28 +53,13 @@ class MCPClient:
         )
         self.stdio, self.write = stdio_transport
         self.session = await self.exit_stack.enter_async_context(
-            ClientSession(self.stdio, self.write)
+            LoggingSession(self.stdio, self.write)
         )
 
-        # Initialize the connection. Wrap to capture server-side import/runtime
-        # errors (for example task_pilot_server.py raising on missing env vars).
-        try:
-            await self.session.initialize()
-        except Exception as e:
-            # Provide a clearer diagnostic message and include the original
-            # exception. The underlying error often originates from the server
-            # process failing to start (import errors or RuntimeError in
-            # task_pilot_server.py).
-            LOG.exception("Failed to initialize MCP session: %s", e)
-            # Ensure we close any partially-opened resources
-            try:
-                await self.exit_stack.aclose()
-            except Exception:
-                pass
-            # Re-raise a more descriptive exception for the caller
-            raise RuntimeError(
-                "Could not start or connect to MCP server. Check server logs and ensure required env vars (e.g. AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_CONTAINER) are set."
-            ) from e
+        # Initialize the connection
+        await self.session.initialize()
+
+        # await self.session.set_logging_level("debug")
 
         # List available tools
         tools_result = await self.session.list_tools()
@@ -180,6 +141,7 @@ class MCPClient:
                 tools=tools,
                 tool_choice="none",  # Don't allow more tool calls
             )
+
             return final_response.choices[0].message.content
 
         # No tool calls, just return the direct response
@@ -207,38 +169,22 @@ class MCPClient:
             except Exception as e:
                 print(f"\nError: {str(e)}")
 
-app = FastAPI()
-# Mount static files (chat SPA)
-app.mount("/static", StaticFiles(directory="./static"), name="static")
+class LoggingSession(ClientSession):
+    async def _received_notification(self, note):
+        root = getattr(note, "root", None)
+        # Spec name is notifications/message
+        if isinstance(root, types.Notification):
+            p = root.params  # p.level (str), p.logger (optional), p.data (any)
+            level = p.level.upper()
+            logger = f"[{p.logger}]" if p.logger else ""
+            data = p.data if isinstance(p.data, str) else json.dumps(p.data, ensure_ascii=False)
+            print(f"[MCP]{logger}[{level}] {data}")
+        # continue normal handling
+        await super()._received_notification(note)
 
-
-@app.get("/")
-async def root_html():
-    """Serve the main HTML page."""
-    return FileResponse("./static/chat.html")
-
-
-# Bot debug endpoints removed — this app now exposes a simple SPA and /message endpoint only.
-
-
-@app.post("/message")
-async def receive_message(req: Request):
-    """Endpoint to receive messages from an Azure Bot or other HTTP client.
-    Expects JSON {"text": "..."} and returns the assistant response.
-    """
-    payload = await req.json()
-    text = payload.get("text") if isinstance(payload, dict) else None
-    if not text:
-        return {"error": "missing text"}
-
-    # For simplicity, create a temporary MCPClient and connect to local server
-    client = MCPClient()
-    try:
-        await client.connect_to_server("task_pilot_server.py")
-        resp = await client.process_query(text)
-        return {"reply": resp}
-    finally:
-        await client.cleanup()
+async def cleanup(self):
+    """Clean up resources"""
+    await self.exit_stack.aclose()
 
 async def main():
     """Main function to run the MCP client"""

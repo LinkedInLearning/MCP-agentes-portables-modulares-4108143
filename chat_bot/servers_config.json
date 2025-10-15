@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "task_pilot": {
+      "command": "python",
+      "args": ["task_pilot_server.py"]
+    }
+  }
+}
