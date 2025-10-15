@@ -86,38 +86,6 @@
       "course"
     ]
   },
-  "9e7f5738808449ca914025ae4e530c26": {
-    "id": "9e7f5738808449ca914025ae4e530c26",
-    "title": "Record Chapter 3",
-    "done": true,
-    "tags": [
-      "course"
-    ]
-  },
-  "a97ead2a42f34de6ab652c6779100b52": {
-    "id": "a97ead2a42f34de6ab652c6779100b52",
-    "title": "Record Chapter 3",
-    "done": true,
-    "tags": [
-      "course"
-    ]
-  },
-  "52f3dee18c664b9b949c4c1ed7a07f3d": {
-    "id": "52f3dee18c664b9b949c4c1ed7a07f3d",
-    "title": "Record Chapter 3",
-    "done": true,
-    "tags": [
-      "course"
-    ]
-  },
-  "7188d0e49e5d4b79ad3a2d3c3a434181": {
-    "id": "7188d0e49e5d4b79ad3a2d3c3a434181",
-    "title": "Record Chapter 3",
-    "done": true,
-    "tags": [
-      "course"
-    ]
-  },
   "ebf4bcc68e204ded82d5074b528df5e8": {
     "id": "ebf4bcc68e204ded82d5074b528df5e8",
     "title": "Write report",
@@ -191,6 +159,24 @@
   "f17a4b1d7fca40cdaea1c597aa4cadfe": {
     "id": "f17a4b1d7fca40cdaea1c597aa4cadfe",
     "title": "Create outliene for INdexes",
+    "done": false,
+    "tags": []
+  },
+  "e0cb8c4f542b43a088508646769752f8": {
+    "id": "e0cb8c4f542b43a088508646769752f8",
+    "title": "Record course live action",
+    "done": false,
+    "tags": []
+  },
+  "3f48700affd446d1b5a7b8019fea9673": {
+    "id": "3f48700affd446d1b5a7b8019fea9673",
+    "title": "Comprar libros",
+    "done": false,
+    "tags": []
+  },
+  "6983e284c3924caab174ca890e176a30": {
+    "id": "6983e284c3924caab174ca890e176a30",
+    "title": "Hacer la compra",
     "done": false,
     "tags": []
   }

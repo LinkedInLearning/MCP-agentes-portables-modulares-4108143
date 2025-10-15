@@ -1,28 +1,25 @@
+"""MCP Client using OpenAI models and tools."""
 import asyncio
 import json
+import sys
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
-
-import nest_asyncio
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncAzureOpenAI
-
-# Apply nest_asyncio to allow nested event loops (needed for Jupyter/IPython)
-nest_asyncio.apply()
 
 # Load environment variables
 load_dotenv()
 
 class MCPClient:
     """Client for interacting with OpenAI models using MCP tools."""
- 
+
     def __init__(self, model: str = "gpt-4.1"):
         """Initialize the OpenAI MCP client.
 
         Args:
-            model: The OpenAI model to use.
+            model: The LLM to use.
         """
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
@@ -63,7 +60,7 @@ class MCPClient:
             print(f"  - {tool.name}: {tool.description}")
 
     async def get_mcp_tools(self) -> List[Dict[str, Any]]:
-        """Get available tools from the MCP server in OpenAI format.
+        """Obtain MCP server tools in the OpenAI format.
 
         Returns:
             A list of tools in OpenAI format.
@@ -167,12 +164,11 @@ class MCPClient:
 async def cleanup(self):
     """Clean up resources"""
     await self.exit_stack.aclose()
-      
-import sys
+
 async def main():
     """Main function to run the MCP client"""
     if len(sys.argv) < 2:
-        print("Usage: python client.py task_pilot_server.py")
+        print("Usage: python client_openai.py task_pilot_server.py")
         sys.exit(1)
 
     client = MCPClient()
@@ -180,7 +176,7 @@ async def main():
         await client.connect_to_server(sys.argv[1])
         await client.chat_loop()
     finally:
-        await client.cleanup()    
+        await client.cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
