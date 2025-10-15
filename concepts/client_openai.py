@@ -24,6 +24,9 @@ class MCPClient:
         # Initialize session and client objects
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
+        # NOTE: construction of AsyncAzureOpenAI depends on environment
+        # (API keys and endpoints). We rely on the library to pick up
+        # env vars, but we still create a client instance to use.
         self.openai_client = AsyncAzureOpenAI(api_version="2024-12-01-preview")
         self.model = model
         self.stdio: Optional[Any] = None
@@ -32,8 +35,10 @@ class MCPClient:
     async def connect_to_server(self, server_script_path: str = "task_pilot_server.py"):
         """Connect to an MCP server.
 
-        Args:
-            server_script_path: Path to the server script.
+        Improvements:
+        - Use the running Python interpreter (sys.executable) to launch the
+          server script which avoids mismatched python executables.
+        - Add logging and basic validation of returned tools.
         """
         # Server configuration
         server_params = StdioServerParameters(
