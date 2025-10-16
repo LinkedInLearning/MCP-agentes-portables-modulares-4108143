@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat - MCP Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; display:flex; flex-direction:column; height:100vh; }
+    header { background:#0b5cff; color:white; padding:12px 16px; }
+    main { padding:16px; flex:1; overflow:auto; }
+    .msg { margin:8px 0; padding:10px; border-radius:8px; max-width:75%; }
+    .me { background:#e6f0ff; align-self:flex-end; }
+    .bot { background:#f1f1f1; align-self:flex-start; }
+    footer { padding:12px; border-top:1px solid #eee; display:flex; gap:8px; }
+    input[type=text]{ flex:1; padding:8px 10px; font-size:16px }
+    button{ padding:8px 12px; font-size:16px }
+    #log { display:flex; flex-direction:column; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>MCP Chat (demo)</strong>
+  </header>
+  <main>
+    <div id="log"></div>
+  </main>
+  <footer>
+    <input id="txt" type="text" placeholder="Escribe tu mensaje y pulsa Enter" />
+    <button id="send">Enviar</button>
+  </footer>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const txt = document.getElementById('txt');
+    const send = document.getElementById('send');
+
+    function addMessage(text, cls){
+      const d = document.createElement('div');
+      d.className = 'msg ' + cls;
+      d.textContent = text;
+      logEl.appendChild(d);
+      // scroll to bottom
+      d.scrollIntoView({behavior:'smooth', block:'end'});
+    }
+
+    async function sendMessage(){
+      const value = txt.value.trim();
+      if(!value) return;
+      addMessage('Tú: ' + value, 'me');
+      txt.value = '';
+      try{
+        const res = await fetch('/message', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({text: value}) });
+        const j = await res.json();
+        const reply = j.reply || j.text || JSON.stringify(j);
+        addMessage('Bot: ' + reply, 'bot');
+      }catch(e){
+        addMessage('Error: ' + e.message, 'bot');
+      }
+    }
+
+    send.addEventListener('click', sendMessage);
+    txt.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendMessage(); });
+    // focus the input
+    txt.focus();
+  </script>
+</body>
+</html>
