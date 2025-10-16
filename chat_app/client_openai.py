@@ -1,17 +1,29 @@
 """MCP Client using OpenAI models and tools."""
 import asyncio
 import json
+import logging
 import sys
+import pathlib as _pathlib
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from mcp import types
+from mcp.client.streamable_http import streamablehttp_client
 from openai import AsyncAzureOpenAI
+
+# FastAPI for HTTP endpoint so Azure Bot Service can call the client
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+LOG = logging.getLogger("client_openai")
 
 # Load environment variables
 load_dotenv()
+
+# (Bot Framework integration removed) The app provides a simple SPA and /message endpoint.
+
 
 class MCPClient:
     """Client for interacting with OpenAI models using MCP tools."""
@@ -33,33 +45,43 @@ class MCPClient:
         self.stdio: Optional[Any] = None
         self.write: Optional[Any] = None
 
-    async def connect_to_server(self, server_script_path: str = "task_pilot_server.py"):
-        """Connect to an MCP server.
+    async def connect_to_server(self, server_script_path: str = "task_pilot_server.py", server_url: str = "http://localhost:8080/mcp"):
+        """Connect to an MCP server using StreamableHTTP."""
+        if server_url:
+            client_ctx = streamablehttp_client(server_url)
+            read_stream, write_stream, _ = await self.exit_stack.enter_async_context(client_ctx)
+            self.session = await self.exit_stack.enter_async_context(
+                ClientSession(read_stream, write_stream)
+            )
+        else:
+            # stdio connection as fallback
+            python_exe = sys.executable or "python"
+            server_path = _pathlib.Path(server_script_path)
+            if not server_path.is_absolute():
+                server_path = (_pathlib.Path(__file__).parent / server_path).resolve()
+            server_params = StdioServerParameters(
+                command=python_exe,
+                args=[str(server_path)],
+            )
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            self.stdio, self.write = stdio_transport
+            self.session = await self.exit_stack.enter_async_context(
+                ClientSession(self.stdio, self.write)
+            )
 
-        Improvements:
-        - Use the running Python interpreter (sys.executable) to launch the
-          server script which avoids mismatched python executables.
-        - Add logging and basic validation of returned tools.
-        """
-        # Server configuration
-        server_params = StdioServerParameters(
-            command="python",
-            args=[server_script_path],
-        )
-
-        # Connect to the server
-        stdio_transport = await self.exit_stack.enter_async_context(
-            stdio_client(server_params)
-        )
-        self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(
-            LoggingSession(self.stdio, self.write)
-        )
-
-        # Initialize the connection
-        await self.session.initialize()
-
-        # await self.session.set_logging_level("debug")
+        # Initialize the connection. Wrap to capture server-side import/runtime
+        # errors (for example task_pilot_server.py raising on missing env vars).
+        try:
+            await self.session.initialize()
+        except Exception as e:
+            LOG.exception("Failed to initialize MCP session: %s", e)
+            # Ensure we close any partially-opened resources
+            try:
+                await self.exit_stack.aclose()
+            except Exception as e:
+                print("Error closing resources:", e)
 
         # List available tools
         tools_result = await self.session.list_tools()
@@ -141,7 +163,6 @@ class MCPClient:
                 tools=tools,
                 tool_choice="none",  # Don't allow more tool calls
             )
-
             return final_response.choices[0].message.content
 
         # No tool calls, just return the direct response
@@ -169,22 +190,35 @@ class MCPClient:
             except Exception as e:
                 print(f"\nError: {str(e)}")
 
-class LoggingSession(ClientSession):
-    async def _received_notification(self, note):
-        root = getattr(note, "root", None)
-        # Spec name is notifications/message
-        if isinstance(root, types.Notification):
-            p = root.params  # p.level (str), p.logger (optional), p.data (any)
-            level = p.level.upper()
-            logger = f"[{p.logger}]" if p.logger else ""
-            data = p.data if isinstance(p.data, str) else json.dumps(p.data, ensure_ascii=False)
-            print(f"[MCP]{logger}[{level}] {data}")
-        # continue normal handling
-        await super()._received_notification(note)
+app = FastAPI()
+# Mount static files (chat SPA)
+app.mount("/static", StaticFiles(directory="./static"), name="static")
 
-async def cleanup(self):
-    """Clean up resources"""
-    await self.exit_stack.aclose()
+
+@app.get("/")
+async def root_html():
+    """Serve the main HTML page."""
+    return FileResponse("./static/chat.html")
+
+@app.post("/message")
+async def receive_message(req: Request):
+    """Endpoint to receive messages from an Azure Bot or other HTTP client."""
+    payload = await req.json()
+    text = payload.get("text") if isinstance(payload, dict) else None
+    if not text:
+        return {"error": "missing text"}
+
+    # For simplicity, create a temporary MCPClient and connect to local server
+    client = MCPClient()
+    try:
+        mcp_url = "https://acr-001-ddb.kindmushroom-70aeff41.westeurope.azurecontainerapps.io"
+        if mcp_url and not mcp_url.startswith("/mcp"):
+            mcp_url = mcp_url.rstrip("/") + "/mcp"
+        await client.connect_to_server(server_url=mcp_url)
+        resp = await client.process_query(text)
+        return {"reply": resp}
+    finally:
+        await client.cleanup()
 
 async def main():
     """Main function to run the MCP client"""

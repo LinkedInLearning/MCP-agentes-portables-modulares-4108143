@@ -1,0 +1,12 @@
+mcp
+azure-identity
+openai
+pydantic
+python-dotenv
+azure-identity
+azure-storage-blob
+fastapi
+uvicorn[standard]
+openai
+requests
+aiohttp

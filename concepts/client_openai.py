@@ -1,8 +1,8 @@
 """MCP Client using OpenAI models and tools."""
 import asyncio
 import json
-import sys
 import logging
+import sys as sys, pathlib as _pathlib
 from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
@@ -53,18 +53,11 @@ class MCPClient:
         """
         # Server configuration
         # Use the current Python executable to avoid mismatched environments
-        import sys as _sys, pathlib as _pathlib
-        python_exe = _sys.executable or "python"
+        python_exe = sys.executable or "python"
         # Resolve the server script to an absolute path relative to this file
         server_path = _pathlib.Path(server_script_path)
         if not server_path.is_absolute():
             server_path = (_pathlib.Path(__file__).parent / server_path).resolve()
-
-        # Debug: print relevant env vars so we can see why server might fail
-        import os as _os
-        LOG.info("Launching MCP server with python=%s, script=%s", python_exe, str(server_path))
-        LOG.info("AZURE_STORAGE_ACCOUNT=%s", _os.environ.get("AZURE_STORAGE_ACCOUNT"))
-        LOG.info("AZURE_STORAGE_CONTAINER=%s", _os.environ.get("AZURE_STORAGE_CONTAINER"))
 
         server_params = StdioServerParameters(
             command=python_exe,

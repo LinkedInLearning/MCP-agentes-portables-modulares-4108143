@@ -1,24 +1,66 @@
 """Server-side task management with MCP."""
-
-from pathlib import Path
-from typing import Optional, Dict
-from uuid import uuid4
+import time
+import logging
+import os
 import json
+from uuid import uuid4
+from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from mcp.server.fastmcp import FastMCP, Context
+from azure.storage.blob import BlobClient
 
-DATA_FILE = Path("data/tasks.json")
-DATA_FILE.parent.mkdir(exist_ok=True)
+LOG = logging.getLogger("task_pilot")
+
+load_dotenv()
+
+AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER", "tasks")
+AZURE_STORAGE_BLOB_NAME = os.environ.get("AZURE_STORAGE_BLOB_NAME", "tasks.json")
+
+def get_blob_client():
+    """Return a BlobClient when Azure Storage."""
+    blob_client = None
+    if AZURE_STORAGE_CONNECTION_STRING:
+        blob_client = BlobClient.from_connection_string(
+            AZURE_STORAGE_CONNECTION_STRING, container_name=AZURE_STORAGE_CONTAINER,
+            blob_name=AZURE_STORAGE_BLOB_NAME)
+    return blob_client
+
+def read_blob_with_retry(blob_client: Any, retries: int = 3, backoff: float = 0.5):
+    """Read the task store from Blob Storage with retries."""
+    for attempt in range(1, retries + 1):
+        try:
+            stream = blob_client.download_blob()
+            return json.loads(stream.readall())
+        except Exception as e:
+            LOG.warning("Blob read error (attempt %d/%d): %s", attempt, retries, e)
+            if attempt == retries:
+                raise
+            time.sleep(backoff * attempt)
+
+def write_blob_with_retry(blob_client: Any, store: Dict[str, dict], retries: int = 3, backoff: float = 0.5):
+    """Write the task store to Blob Storage with retries."""
+    data = json.dumps(store, indent=2).encode("utf-8")
+    for attempt in range(1, retries + 1):
+        try:
+            blob_client.upload_blob(data, overwrite=True)
+            return
+        except Exception as e:
+            LOG.warning("Blob write error (attempt %d/%d): %s", attempt, retries, e)
+            if attempt == retries:
+                raise
+            time.sleep(backoff * attempt)
 
 def load() -> Dict[str, dict]:
-    """Load the task store from disk, or return empty."""
-    if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    return {}
+    """Load the task store from Blob Storage. Raises if storage not available."""
+    blob = get_blob_client()
+    return read_blob_with_retry(blob)
 
 def save(store: Dict[str, dict]) -> None:
-    """Save the task store to disk."""
-    DATA_FILE.write_text(json.dumps(store, indent=2), encoding="utf-8")
+    """Save the task store to Blob Storage. Raises on failure."""
+    blob = get_blob_client()
+    write_blob_with_retry(blob, store)
 
 # ---------- Data model ----------
 class Task(BaseModel):
@@ -80,32 +122,6 @@ def clear_completed() -> int:
     if removed:
         save(STORE)
     return removed
-
-@mcp.tool()
-async def bulk_import(lines: list[str], ctx: Context) -> int:
-    """
-    Import tasks from a list of lines (one title per line).
-    Emits progress notifications visible in Inspector.
-    """
-    total = len(lines) or 1
-    created = 0
-    await ctx.info(f"Starting import of {len(lines)} tasks")
-
-    for idx, raw in enumerate(lines, start=1):
-        title = (raw or "").strip()
-        if not title:
-            await ctx.warning(f"Skipping empty line {idx}")
-            continue
-        t = Task(title=title)
-        STORE[t.id] = t.model_dump()
-        created += 1
-
-        await ctx.report_progress(progress=idx, total=total, message=f"Imported {idx}/{total}")
-        await ctx.debug(f"Created task {t.id}: {t.title}")
-
-    save(STORE)
-    await ctx.info(f"Import complete: {created} created")
-    return created
 
 # ---------- Resources (read-only) ----------
 @mcp.resource("tasks://all")

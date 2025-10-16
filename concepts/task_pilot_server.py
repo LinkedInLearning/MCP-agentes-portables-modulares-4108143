@@ -2,118 +2,51 @@
 import time
 import logging
 import os
-import os as _os
 import json
-from dotenv import load_dotenv
-from typing import Optional, Dict, Any
 from uuid import uuid4
+from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from mcp.server.fastmcp import FastMCP, Context
-from azure.identity import EnvironmentCredential, DefaultAzureCredential
-try:
-    from azure.storage.blob import BlobClient
-    from azure.core.exceptions import ResourceNotFoundError, HttpResponseError
-except ImportError:
-    # Import failures are handled at runtime; developer should `pip install azure-storage-blob azure-identity`
-    BlobClient = None
-    ResourceNotFoundError = None
-    HttpResponseError = None
+from azure.storage.blob import BlobClient
 
 LOG = logging.getLogger("task_pilot")
 
 load_dotenv()
 
-STORAGE_BLOB_NAME = "tasks.json"
+AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER", "tasks")
+AZURE_STORAGE_BLOB_NAME = os.environ.get("AZURE_STORAGE_BLOB_NAME", "tasks.json")
 
-# Configuration: environment-driven. AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_CONTAINER
-# are required. This server persists tasks exclusively to Azure Blob Storage.
-STORAGE_ACCOUNT = os.environ.get("AZURE_STORAGE_ACCOUNT")
-STORAGE_CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER")
-if not STORAGE_ACCOUNT or not STORAGE_CONTAINER:
-    raise RuntimeError(
-        "AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_CONTAINER must be set to use Azure Blob persistence"
-    )
+def get_blob_client():
+    """Return a BlobClient when Azure Storage."""
+    blob_client = None
+    if AZURE_STORAGE_CONNECTION_STRING:
+        blob_client = BlobClient.from_connection_string(
+            AZURE_STORAGE_CONNECTION_STRING, container_name=AZURE_STORAGE_CONTAINER,
+            blob_name=AZURE_STORAGE_BLOB_NAME)
+    return blob_client
 
-LOG.info("Configured to use Azure Blob Storage: account=%s container=%s",
-          STORAGE_ACCOUNT, STORAGE_CONTAINER)
-
-def _get_blob_client():
-    """Return a BlobClient when Azure Storage configuration is present, else None."""
-    if BlobClient is None:
-        raise RuntimeError("azure.storage.blob is not installed. Please install azure-storage-blob and azure-identity")
-    
-    # Try DefaultAzureCredential first (preferred for production / managed identity)
-    last_exc = None
-    try:
-        credential = EnvironmentCredential()
-        # quick test token call to surface authentication errors early
-        credential.get_token("https://storage.azure.com/.default")
-        url = f"https://{STORAGE_ACCOUNT}.blob.core.windows.net/{STORAGE_CONTAINER}/{STORAGE_BLOB_NAME}"
-        return BlobClient.from_blob_url(blob_url=url, credential=credential)
-    except Exception as e_default:
-        LOG.warning("DefaultAzureCredential unavailable: %s", e_default)
-        last_exc = e_default
-
-    # Fallback: try Azure CLI credential (requires 'az' available in PATH)
-    try:
-        from azure.identity import AzureCliCredential
-
-        try:
-            cli_cred = AzureCliCredential()
-            cli_cred.get_token("https://storage.azure.com/.default")
-            url = f"https://{STORAGE_ACCOUNT}.blob.core.windows.net/{STORAGE_CONTAINER}/{STORAGE_BLOB_NAME}"
-            return BlobClient.from_blob_url(blob_url=url, credential=cli_cred)
-        except Exception as e_cli:
-            LOG.warning("AzureCliCredential failed: %s", e_cli)
-            last_exc = e_cli
-    except Exception as import_cli_err:
-        LOG.debug("AzureCliCredential not available: %s", import_cli_err)
-
-    # Fallback: use account key from environment (StorageSharedKeyCredential)
-    key = _os.environ.get("AZURE_STORAGE_KEY") or _os.environ.get("AZURE_STORAGE_ACCOUNT_KEY")
-    if key:
-        try:
-            shared_cred = StorageSharedKeyCredential(STORAGE_ACCOUNT, key)
-            url = f"https://{STORAGE_ACCOUNT}.blob.core.windows.net/{STORAGE_CONTAINER}/{STORAGE_BLOB_NAME}"
-            return BlobClient.from_blob_url(blob_url=url, credential=shared_cred)
-        except Exception as e_key:
-            LOG.warning("StorageSharedKeyCredential failed: %s", e_key)
-            last_exc = e_key
-
-    # No credential strategy succeeded — raise a helpful error with hints
-    hint = (
-        "Could not create an authenticated BlobClient. Ensure one of the following is available:\n"
-        " - DefaultAzureCredential works (Managed Identity or environment variables set),\n"
-        " - Azure CLI is installed and 'az login' was run in the same environment, or\n"
-        " - AZURE_STORAGE_KEY is set with an account key (for local testing).\n"
-        "See https://aka.ms/azsdk/python/identity/troubleshoot for details."
-    )
-    LOG.error(hint)
-    # raise the last low-level exception as context
-    raise RuntimeError(hint) from last_exc
-
-def _read_blob_with_retry(blob_client: Any, retries: int = 3, backoff: float = 0.5):
+def read_blob_with_retry(blob_client: Any, retries: int = 3, backoff: float = 0.5):
+    """Read the task store from Blob Storage with retries."""
     for attempt in range(1, retries + 1):
         try:
             stream = blob_client.download_blob()
             return json.loads(stream.readall())
-        except ResourceNotFoundError:
-            # Blob doesn't exist yet -> return empty store
-            LOG.info("Blob not found; returning empty store")
-            return {}
-        except HttpResponseError as e:
+        except Exception as e:
             LOG.warning("Blob read error (attempt %d/%d): %s", attempt, retries, e)
             if attempt == retries:
                 raise
             time.sleep(backoff * attempt)
 
-def _write_blob_with_retry(blob_client: Any, store: Dict[str, dict], retries: int = 3, backoff: float = 0.5):
+def write_blob_with_retry(blob_client: Any, store: Dict[str, dict], retries: int = 3, backoff: float = 0.5):
+    """Write the task store to Blob Storage with retries."""
     data = json.dumps(store, indent=2).encode("utf-8")
     for attempt in range(1, retries + 1):
         try:
             blob_client.upload_blob(data, overwrite=True)
             return
-        except HttpResponseError as e:
+        except Exception as e:
             LOG.warning("Blob write error (attempt %d/%d): %s", attempt, retries, e)
             if attempt == retries:
                 raise
@@ -121,13 +54,13 @@ def _write_blob_with_retry(blob_client: Any, store: Dict[str, dict], retries: in
 
 def load() -> Dict[str, dict]:
     """Load the task store from Blob Storage. Raises if storage not available."""
-    blob = _get_blob_client()
-    return _read_blob_with_retry(blob)
+    blob = get_blob_client()
+    return read_blob_with_retry(blob)
 
 def save(store: Dict[str, dict]) -> None:
     """Save the task store to Blob Storage. Raises on failure."""
-    blob = _get_blob_client()
-    _write_blob_with_retry(blob, store)
+    blob = get_blob_client()
+    write_blob_with_retry(blob, store)
 
 # ---------- Data model ----------
 class Task(BaseModel):

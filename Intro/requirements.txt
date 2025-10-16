@@ -1,2 +1,0 @@
-python-dotenv>=1.0.0      # For environment variables
-mcp[cli]>=1.4.0          # For MCP server functionality
